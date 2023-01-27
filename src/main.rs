@@ -1,6 +1,6 @@
 use std::{num::ParseIntError, thread, path::PathBuf};
 use clap::{Parser, command, Subcommand};
-use ini::Ini;
+use ini::{Ini, Error};
 
 use notify_rust::Notification;
 
@@ -18,13 +18,14 @@ struct Timer {
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 struct Args {
+
+    // Sets config file on which to operate
+    #[arg(value_name = "CONFIG_FILE", default_value = "config.ini")]
+    config: PathBuf,
+    
     // The subcommand to run
     #[command(subcommand)]
-    command: Option<Commands>,
-
-    /// Sets config file on which to operate
-    #[arg(short, long, value_name = "FILE", default_value = "config.ini")]
-    config: PathBuf,    
+    command: Option<Commands>,    
 }
 
 #[derive(Subcommand, Debug)]
@@ -51,33 +52,24 @@ enum Commands {
     Remove,
 }
 
-fn main() -> Result<(), ParseIntError> {
+fn main() -> Result<(), Error> {
     let args = Args::parse();
-    
-    let conf = Ini::load_from_file(args.config);
+
+    let conf = Ini::load_from_file(args.config)?;
+
     
     match args.command {
         Some(Commands::Start) => {
-            match conf {
-                Ok(conf) => {
-                    let timers = load_timers_from_file(conf);
-                    start_timers(timers);
-                },
-                Err(e) => {
-                    println!("Error: {}", e);
-                }
-            }
-        },
+                let timers = load_timers_from_file(conf);
+                start_timers(timers);
+        },        
         Some(Commands::List) => todo!(),
         Some(Commands::Add { name, notification, interval, repeating }) => todo!(),
         Some(Commands::Remove) => todo!(),
         None => return Ok(()),
     }
-
-
     
     Ok(())
-    
 }
 
 fn load_timers_from_file(ini: Ini) -> Vec<Timer> {
