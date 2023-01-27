@@ -19,8 +19,8 @@ struct Timer {
 #[command(author, version, about, long_about = None)]
 struct Args {
     // Sets config file on which to operate
-    #[arg(value_name = "CONFIG_FILE", default_value = "config.ini")]
-    config: PathBuf,
+    #[arg(value_name = "CONFIG_FILE", help="when this is not set, config.ini in the same folder as the executable will be used")]
+    config: Option<PathBuf>,
 
     // The subcommand to run
     #[command(subcommand)]
@@ -56,8 +56,22 @@ enum Commands {
 
 fn main() -> Result<(), Error> {
     let args = Args::parse();
+    
+    let ini_path = match &args.config {
+        Some(config) => config.clone(),
+        None => {
+            let mut path = std::env::current_exe().unwrap();
+            path.pop();
+            path.push("config.ini");
+            
+            if !path.clone().exists() {
+                std::fs::write(&path, "")?;
+            }
+            path
+        },
+    };
 
-    let mut conf = Ini::load_from_file(&args.config)?;
+    let mut conf = Ini::load_from_file(&ini_path)?;
     
     let timers = load_timers_from_file(&conf);
     match args.command {
@@ -76,7 +90,7 @@ fn main() -> Result<(), Error> {
     }
 
     // make the changes permanent
-    conf.write_to_file(&args.config)?;
+    conf.write_to_file(&ini_path)?;
 
     Ok(())
 }
@@ -144,7 +158,7 @@ fn list_timers(timers: Vec<Timer>) {
 }
 
 fn add_timer(ini: &mut Ini, name: String, notification: String, interval: u64, repeating: bool) {
-    ini.with_section(Some(name.clone()))
+    ini.with_section(Some(name))
         .set("notification", notification)
         .set("interval", interval.to_string())
         .set("repeating", repeating.to_string());
