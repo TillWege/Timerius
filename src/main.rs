@@ -1,4 +1,5 @@
 use std::{num::ParseIntError, thread};
+use clap::{Parser, command};
 use ini::Ini;
 
 use notify_rust::Notification;
@@ -13,16 +14,47 @@ struct Timer {
     ended: bool,
 }
 
+/// A Program to set a multitude of asynchronous timers
+#[derive(Parser, Debug)]
+#[command(author, version, about, long_about = None)]
+struct Args {
+    // start all timers
+   #[arg(short, long)]
+   start: bool,
+
+}
+
+
 fn main() -> Result<(), ParseIntError> {
-    let conf = Ini::load_from_file("config.ini").expect("couldnt find config.ini");
+    let args = Args::parse();
+    
+    let conf = Ini::load_from_file("config.ini");
+    
+    match conf {
+        Ok(conf) => {
+            let timers = load_timers_from_file(conf);
+            if args.start {
+                start_timers(timers);
+            }
+        },
+        Err(e) => {
+            println!("Error: {}", e);
+        }
+    }
+    
+    Ok(())
+    
+}
+
+fn load_timers_from_file(ini: Ini) -> Vec<Timer> {
     let mut timers: Vec<Timer> = Vec::new();
-    for section in conf.sections() {
+    for section in ini.sections() {
         if let Some(section) = section {
-            let name = conf.get_from(Some(section), "name").unwrap_or(section).to_string();
-            let notification = conf.get_from(Some(section), "notification").unwrap_or(section).to_string();
-            let interval = conf.get_from(Some(section), "interval").unwrap_or("0");
+            let name = ini.get_from(Some(section), "name").unwrap_or(section).to_string();
+            let notification = ini.get_from(Some(section), "notification").unwrap_or(section).to_string();
+            let interval = ini.get_from(Some(section), "interval").unwrap_or("0");
             let interval = interval.parse::<u64>().unwrap();
-            let repeating = conf.get_from(Some(section), "repeating").unwrap();
+            let repeating = ini.get_from(Some(section), "repeating").unwrap();
             let repeating = repeating.parse::<bool>().unwrap();
             timers.push( Timer {
                 name: name.to_string(),
@@ -35,6 +67,10 @@ fn main() -> Result<(), ParseIntError> {
         }
     }
 
+    timers
+}
+
+fn start_timers(mut timers: Vec<Timer>) {
     while (timers.iter().map(|x| x.ended).collect::<Vec<bool>>()).contains(&false) {
         for timer in &mut timers {
             if timer.start.elapsed() >= timer.interval {
@@ -52,7 +88,4 @@ fn main() -> Result<(), ParseIntError> {
         }
         thread::sleep(std::time::Duration::from_secs(1));
     }
-
-    Ok(())
-    
 }
