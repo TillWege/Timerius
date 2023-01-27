@@ -1,4 +1,4 @@
-use std::{num::ParseIntError, thread};
+use std::{num::ParseIntError, thread, path::PathBuf};
 use clap::{Parser, command, Subcommand};
 use ini::Ini;
 
@@ -18,8 +18,13 @@ struct Timer {
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 struct Args {
+    // The subcommand to run
     #[command(subcommand)]
     command: Option<Commands>,
+
+    /// Sets config file on which to operate
+    #[arg(short, long, value_name = "FILE", default_value = "config.ini")]
+    config: PathBuf,    
 }
 
 #[derive(Subcommand, Debug)]
@@ -46,13 +51,10 @@ enum Commands {
     Remove,
 }
 
-
-
-
 fn main() -> Result<(), ParseIntError> {
     let args = Args::parse();
     
-    let conf = Ini::load_from_file("config.ini");
+    let conf = Ini::load_from_file(args.config);
     
     match args.command {
         Some(Commands::Start) => {
