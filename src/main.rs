@@ -1,6 +1,6 @@
-use std::{num::ParseIntError, thread, path::PathBuf};
-use clap::{Parser, command, Subcommand};
-use ini::{Ini, Error};
+use clap::{command, Parser, Subcommand};
+use ini::{Error, Ini};
+use std::{path::PathBuf, thread};
 
 use notify_rust::Notification;
 
@@ -18,14 +18,13 @@ struct Timer {
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 struct Args {
-
     // Sets config file on which to operate
     #[arg(value_name = "CONFIG_FILE", default_value = "config.ini")]
     config: PathBuf,
-    
+
     // The subcommand to run
     #[command(subcommand)]
-    command: Option<Commands>,    
+    command: Option<Commands>,
 }
 
 #[derive(Subcommand, Debug)]
@@ -34,55 +33,71 @@ enum Commands {
     List,
     Add {
         // Name of the new Timer
-        #[arg(short, long)]
+        #[arg(short, long, default_value = "New Timer")]
         name: String,
-        
+
         // Notification to show when the timer is up
-        #[arg(short, long)]
+        #[arg(short = 'd', long, default_value = "Timer is up")]
         notification: String,
-        
+
         // Interval in seconds after which the notification should be shown
-        #[arg(short, long)]
+        #[arg(short, long, default_value = "60")]
         interval: u64,
 
         // Should the timer repeat after it is up
-        #[arg(short, long)]
+        #[arg(short, long, default_value = "true")]
         repeating: bool,
     },
-    Remove,
+    Remove {
+        // Name of the timer to remove
+        name: String,
+    }
 }
 
 fn main() -> Result<(), Error> {
     let args = Args::parse();
 
-    let conf = Ini::load_from_file(args.config)?;
-
+    let mut conf = Ini::load_from_file(&args.config)?;
     
+    let timers = load_timers_from_file(&conf);
     match args.command {
-        Some(Commands::Start) => {
-                let timers = load_timers_from_file(conf);
-                start_timers(timers);
-        },        
-        Some(Commands::List) => todo!(),
-        Some(Commands::Add { name, notification, interval, repeating }) => todo!(),
-        Some(Commands::Remove) => todo!(),
+        Some(Commands::Start) => start_timers(timers),
+        Some(Commands::List) => list_timers(timers),
+        Some(Commands::Add {
+            name,
+            notification,
+            interval,
+            repeating,
+        }) => add_timer(&mut conf, name, notification, interval, repeating),
+        Some(Commands::Remove {
+            name,
+        }) => remove_timer(&mut conf, name),
         None => return Ok(()),
     }
-    
+
+    // make the changes permanent
+    conf.write_to_file(&args.config)?;
+
     Ok(())
 }
 
-fn load_timers_from_file(ini: Ini) -> Vec<Timer> {
+fn load_timers_from_file(ini: &Ini) -> Vec<Timer> {
     let mut timers: Vec<Timer> = Vec::new();
     for section in ini.sections() {
         if let Some(section) = section {
-            let name = ini.get_from(Some(section), "name").unwrap_or(section).to_string();
-            let notification = ini.get_from(Some(section), "notification").unwrap_or(section).to_string();
+            let name = ini
+                .get_from(Some(section), "name")
+                .unwrap_or(section)
+                .to_string();
+            let notification = ini
+                .get_from(Some(section), "notification")
+                .unwrap_or(section)
+                .to_string();
             let interval = ini.get_from(Some(section), "interval").unwrap_or("0");
             let interval = interval.parse::<u64>().unwrap();
             let repeating = ini.get_from(Some(section), "repeating").unwrap();
             let repeating = repeating.parse::<bool>().unwrap();
-            timers.push( Timer {
+            timers.push(Timer {
                 name: name.to_string(),
                 notification: notification.to_string(),
                 start: std::time::Instant::now(),
@@ -114,4 +129,27 @@ fn start_timers(mut timers: Vec<Timer>) {
         }
         thread::sleep(std::time::Duration::from_secs(1));
     }
+}
+
+fn list_timers(timers: Vec<Timer>) {
+    for timer in timers {
+        println!(
+            "{}: {} {} {} seconds",
+            timer.name,
+            timer.notification,
+            if timer.repeating { "every" } else { "after" },
+            timer.interval.as_secs()
+        );
+    }
+}
+
+fn add_timer(ini: &mut Ini, name: String, notification: String, interval: u64, repeating: bool) {
+    ini.with_section(Some(name.clone()))
+        .set("notification", notification)
+        .set("interval", interval.to_string())
+        .set("repeating", repeating.to_string());
+}
+
+fn remove_timer(ini: &mut Ini, name: String) {
+    ini.delete(Some(name));
 }
