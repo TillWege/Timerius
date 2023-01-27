@@ -1,5 +1,5 @@
 use std::{num::ParseIntError, thread};
-use clap::{Parser, command};
+use clap::{Parser, command, Subcommand};
 use ini::Ini;
 
 use notify_rust::Notification;
@@ -18,11 +18,35 @@ struct Timer {
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 struct Args {
-    // start all timers
-   #[arg(short, long)]
-   start: bool,
-
+    #[command(subcommand)]
+    command: Option<Commands>,
 }
+
+#[derive(Subcommand, Debug)]
+enum Commands {
+    Start,
+    List,
+    Add {
+        // Name of the new Timer
+        #[arg(short, long)]
+        name: String,
+        
+        // Notification to show when the timer is up
+        #[arg(short, long)]
+        notification: String,
+        
+        // Interval in seconds after which the notification should be shown
+        #[arg(short, long)]
+        interval: u64,
+
+        // Should the timer repeat after it is up
+        #[arg(short, long)]
+        repeating: bool,
+    },
+    Remove,
+}
+
+
 
 
 fn main() -> Result<(), ParseIntError> {
@@ -30,17 +54,25 @@ fn main() -> Result<(), ParseIntError> {
     
     let conf = Ini::load_from_file("config.ini");
     
-    match conf {
-        Ok(conf) => {
-            let timers = load_timers_from_file(conf);
-            if args.start {
-                start_timers(timers);
+    match args.command {
+        Some(Commands::Start) => {
+            match conf {
+                Ok(conf) => {
+                    let timers = load_timers_from_file(conf);
+                    start_timers(timers);
+                },
+                Err(e) => {
+                    println!("Error: {}", e);
+                }
             }
         },
-        Err(e) => {
-            println!("Error: {}", e);
-        }
+        Some(Commands::List) => todo!(),
+        Some(Commands::Add { name, notification, interval, repeating }) => todo!(),
+        Some(Commands::Remove) => todo!(),
+        None => return Ok(()),
     }
+
+
     
     Ok(())
     
